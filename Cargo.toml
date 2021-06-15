@@ -1,5 +1,5 @@
 [package]
-name = "test_ed"
+name = "rust_ed"
 version = "0.1.0"
 authors = ["johan"]
 edition = "2018"
