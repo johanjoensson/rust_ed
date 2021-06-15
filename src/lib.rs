@@ -1,7 +1,5 @@
 use std::convert::TryInto;
-use std::error::Error;
 use std::option::Option;
-use std::process;
 
 pub struct Config {
     pub index: u64,
@@ -36,28 +34,22 @@ impl Config {
     }
 }
 
-pub fn run() -> Result<(), Box<dyn Error>> {
+pub fn run() -> Result<(), &'static str> {
     let state = vec![0, 1, 3];
-    let mut c = Config::new(state).unwrap_or_else(|err| {
-        println!("{}", err);
-        process::exit(1);
-    });
-    match c.set(2) {
-        None => {
-            println!("No state!");
-            return Ok(());
-        }
-        _ => {}
+    let mut c = match Config::new(state) {
+        Ok(config) => config,
+        Err(str) => return Err(str),
+    };
+
+    match c.set(2).ok_or("No state") {
+        Ok(_) => {}
+        Err(str) => return Err(str),
     }
-    match c.clear(1) {
-        None => {
-            println!("No state!");
-            return Ok(());
-        }
-        _ => {}
+    match c.clear(1).ok_or("No state") {
+        Ok(_) => {}
+        Err(str) => return Err(str),
     }
     println!("Index of config is {}", c.index);
-
     Ok(())
 }
 
