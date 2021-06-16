@@ -8,12 +8,13 @@ pub enum AC {
 }
 
 pub struct Operator {
-    pub acs: Vec<(f64, AC)>,
+    pub a: f64,
+    pub acs: Vec<AC>,
 }
 
 impl Operator {
-    pub fn new(acs: Vec<(f64, AC)>) -> Operator {
-        Operator { acs }
+    pub fn new(a : f64, acs: Vec<AC>) -> Operator {
+        Operator { a, acs }
     }
 }
 
@@ -103,16 +104,16 @@ impl State {
     pub fn apply(self, mut op: Operator) -> State {
         op.acs.reverse();
         let mut res: HashMap<u64, f64> = HashMap::new();
-        let mut tmp_states: HashMap<u64, f64> = HashMap::new();
-        for (state, amp) in &self.amplitudes {
+        'states: for (state, amp) in &self.amplitudes {
+            let mut tmp_states: HashMap<u64, f64> = HashMap::new();
             tmp_states.insert(*state, *amp);
-            for (a, c) in &op.acs {
+            for c in &op.acs {
                 let mut next_states: HashMap<u64, f64> = HashMap::new();
-                'states: for (s, v) in &tmp_states {
+                for (s, v) in &tmp_states {
                     let conf = Config::from_uint(s).unwrap();
                     if let Some((phase, ns)) = conf.apply(c) {
                         let ai = next_states.entry(ns.index).or_insert(0 as f64);
-                        *ai += a * v * phase as f64;
+                        *ai += v * phase as f64;
                     } else {
                         next_states.clear();
                         continue 'states;
@@ -120,11 +121,10 @@ impl State {
                 }
                 next_states.retain(|_, amp| amp.abs() > f64::EPSILON);
                 tmp_states = next_states;
-                println!("{:?}", tmp_states);
             }
             for (s, v) in &tmp_states {
                 let a = res.entry(*s).or_insert(0 as f64);
-                *a += v;
+                *a += op.a*v;
             }
         }
         res.retain(|_, v| v.abs() > f64::EPSILON);
@@ -133,10 +133,9 @@ impl State {
 }
 
 pub fn run() -> Result<(), &'static str> {
-    let a = Operator::new(vec![
-        (1.0, AC::Create(1)),
-        (1.0, AC::Create(0)),
-        (1.0, AC::Annihilate(1)),
+    let n1 = Operator::new(1.0, vec![
+        AC::Create(1),
+        AC::Annihilate(1),
     ]);
     let s = State::new(vec![(7, 0.33), (2, 0.33), (14, 0.33)]);
     println!("Initial state :");
@@ -146,7 +145,7 @@ pub fn run() -> Result<(), &'static str> {
     }
     print!("\n");
 
-    let ns = s.apply(a);
+    let ns = s.apply(n1);
     println!("Final state :");
     print!("\t");
     for (key, val) in &ns.amplitudes {
