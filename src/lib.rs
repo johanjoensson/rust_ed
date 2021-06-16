@@ -67,10 +67,12 @@ impl Config {
         match op {
             AC::Create(pos) => {
                 if let Some(new_state) = self.set(&pos) {
-                    if (self.index & (1 << pos) - 1).count_ones() % 2 != 0 {
-                        return Some((-1, new_state));
-                    } else {
+                    if (!self.index & (1 << pos) - 1).count_ones() % 2 == 0 {
+                        println!("{:b} has an even number of zeros before position {}", self.index, pos);
                         return Some((1, new_state));
+                    } else {
+                        println!("{:b} has an odd number of zeros before position {}", self.index, pos);
+                        return Some((-1, new_state));
                     };
                 } else {
                     return None;
@@ -78,10 +80,12 @@ impl Config {
             }
             AC::Annihilate(pos) => {
                 if let Some(new_state) = self.clear(&pos) {
-                    if (self.index & (1 << pos) - 1).count_ones() % 2 != 0 {
-                        return Some((-1, new_state));
-                    } else {
+                    if (self.index & (1 << pos) - 1).count_ones() % 2 == 0 {
+                        println!("{:b} has an even number of ones before position {}", self.index, pos);
                         return Some((1, new_state));
+                    } else {
+                        println!("{:b} has an odd number of ones before position {}", self.index, pos);
+                        return Some((-1, new_state));
                     };
                 } else {
                     return None;
@@ -173,15 +177,13 @@ mod tests {
 
     #[test]
     fn test_set() {
-        let mut state = Config::from_vec(Vec::new()).unwrap();
-        state.set(&2);
-        assert_eq!(state.index, 4);
+        let state = Config::from_vec(Vec::new()).unwrap();
+        assert_eq!(state.set(&2).unwrap().index, 4);
     }
     #[test]
     fn test_clear() {
-        let mut state = Config::from_vec(vec![0, 1]).unwrap();
-        state.clear(&0);
-        assert_eq!(state.index, 2);
+        let  state = Config::from_vec(vec![0, 1]).unwrap();
+        assert_eq!(state.clear(&0).unwrap().index, 2);
     }
 
     #[test]
@@ -198,7 +200,7 @@ mod tests {
 
     #[test]
     fn test_apply_state() {
-        let a = Operator::new(vec![(1.0, AC::Create(0)), (1.0, AC::Annihilate(1))]);
+        let a = Operator::new(1.0, vec![ AC::Create(0), AC::Annihilate(1)]);
         let s = State::new(vec![(7, 0.33), (2, 0.33), (14, 0.33)]);
         let ns = s.apply(a);
         let mut check = HashMap::new();
