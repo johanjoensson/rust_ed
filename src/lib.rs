@@ -68,10 +68,8 @@ impl Config {
             AC::Create(pos) => {
                 if let Some(new_state) = self.set(&pos) {
                     if (!self.index & (1 << pos) - 1).count_ones() % 2 == 0 {
-                        println!("{:b} has an even number of zeros before position {}", self.index, pos);
                         return Some((1, new_state));
                     } else {
-                        println!("{:b} has an odd number of zeros before position {}", self.index, pos);
                         return Some((-1, new_state));
                     };
                 } else {
@@ -81,10 +79,8 @@ impl Config {
             AC::Annihilate(pos) => {
                 if let Some(new_state) = self.clear(&pos) {
                     if (self.index & (1 << pos) - 1).count_ones() % 2 == 0 {
-                        println!("{:b} has an even number of ones before position {}", self.index, pos);
                         return Some((1, new_state));
                     } else {
-                        println!("{:b} has an odd number of ones before position {}", self.index, pos);
                         return Some((-1, new_state));
                     };
                 } else {
