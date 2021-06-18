@@ -21,7 +21,7 @@ impl Operator {
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
 pub struct Slater {
-    pub index: u64,
+    index: u64,
 }
 
 impl fmt::Binary for Slater {
