@@ -3,24 +3,35 @@ use std::collections::HashMap;
 use std::option::Option;
 use std::fmt;
 
+/// This represents a creation/annihilation operator
 pub enum AC {
+    /// Create and Annihilate requires a state/position to act on
     Create(u64),
     Annihilate(u64),
 }
 
+/// This represents an operator, acting on Slater determinants
 pub struct Operator {
-    pub a: f64,
-    pub acs: Vec<AC>,
+    /// Each operator consists of a sum of terms.
+    /// Each term in the operator is an amplitude and a sequence of creation/annihilation operators.
+    terms: Vec<(f64, Vec<AC>)>,
 }
 
 impl Operator {
-    pub fn new(a : f64, acs: Vec<AC>) -> Operator {
-        Operator { a, acs }
+    /// Returns an operator with the terms given
+    ///
+    /// # Arguments
+    ///
+    /// * `terms` - a Vec containing tuples of amplitudes and Vec<AC>
+    pub fn new(terms : Vec<(f64, Vec<AC>)>) -> Operator {
+        Operator { terms }
     }
 }
 
+/// This represents a single, unique, Slater determinant.
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
 pub struct Slater {
+    /// The unique index of the Slater determinant.
     index: u64,
 }
 
@@ -32,10 +43,24 @@ impl fmt::Binary for Slater {
 }
 
 impl Slater {
+    /// Returns a Slater determinant with the supplied index.
+    ///
+    /// # Arguments
+    ///
+    /// * `index` - The unique index of the Slater determinant.
     pub fn new(index: u64) -> Self {
         Self { index }
     }
 
+    /// Returns a Slater determinant corresponding to the supplied states being occupied.
+    ///
+    /// # Arguments
+    ///
+    /// * `arr` - The vector containing the states to occupy.
+    ///
+    /// # Errors
+    ///
+    /// * If the supplied vector contains duplicates of any index this function returns an Error.
     pub fn from_vec(arr: Vec<u64>) -> Result<Self, &'static str> {
         let mut index: u64 = 0;
         let mut added_indices: Vec<u64> = Vec::new();
@@ -49,10 +74,15 @@ impl Slater {
         Ok(Self { index })
     }
 
-    pub fn from_uint(&index: &u64) -> Result<Self, &'static str> {
-        Ok(Self::new(index))
-    }
-
+    /// Returns a Slater determinant corresponding to creating a particle in state j (ignoring phase factors).
+    ///
+    /// # Arguments
+    ///
+    /// * `j` - The single particle state in which to create a particle.
+    ///
+    /// # Errors
+    ///
+    /// * If the single particle state j is already occupied, this function returns None.
     fn create(self, &j: &u64) -> Option<Self> {
         match self.index & (1 << j) {
             0 => Some(Self {
@@ -62,6 +92,14 @@ impl Slater {
         }
     }
 
+    /// Returns a Slater determinant corresponding to annihilating a particle in state j (ignoring phase factors).
+    /// # Arguments
+    ///
+    /// * `j` - The single particle state in which to annihilate a particle.
+    ///
+    /// # Errors
+    ///
+    /// * If the single particle state j is already empty, this function returns None.
     fn annihilate(self, &j: &u64) -> Option<Self> {
         match self.index & (1 << j) {
             0 => None,
@@ -71,6 +109,14 @@ impl Slater {
         }
     }
 
+    /// Returns a Slater determinant corresponding to applying the creation/annihilation operator op to this state (including phase factors).
+    /// # Arguments
+    ///
+    /// * `op` - The creation/annihilation operator to apply to this state.
+    ///
+    /// # Errors
+    ///
+    /// * If the reuslt of applying op to this state is None, this function returns None.
     pub fn apply(&self, op: &AC) -> Option<(i32, Self)> {
         match op {
             AC::Create(pos) => {
@@ -99,39 +145,54 @@ impl Slater {
     }
 }
 
+/// Represents a many body state as a linear combination of Slater determinants.
 pub struct State {
-    pub amplitudes: HashMap<Slater, f64>,
+    /// A HashMap with the Slater determinants as keys and their amplitudes as values.
+    /// Slater determinants with 0 amplitude should not be included in this map.
+    amplitudes: HashMap<Slater, f64>,
 }
 
 impl State {
+    /// Returns a State corresponding to the linear combination of Slater determinants supplied.
+    ///
+    /// # Arguments
+    ///
+    /// * `amplitudes` - A vector of tuples of Slater determinants and their corresponding amplitudes.
     pub fn new(states: Vec<(Slater, f64)>) -> State {
         let amplitudes = states.into_iter().collect();
         State { amplitudes }
     }
 
-    pub fn apply(self, mut op: Operator) -> State {
-        op.acs.reverse();
+    /// Returns a State object corresponding to the result of applying the operator `op` to this state.
+    ///
+    /// # Arguments
+    ///
+    /// * `op` - The operator object to apply to this state.
+    pub fn apply(self, op: Operator) -> State {
         let mut res: HashMap<Slater, f64> = HashMap::new();
-        'states: for (state, amp) in &self.amplitudes {
-            let mut tmp_states: HashMap<Slater, f64> = HashMap::new();
-            tmp_states.insert(*state, *amp);
-            for c in &op.acs {
-                let mut next_states: HashMap<Slater, f64> = HashMap::new();
-                for (s, v) in &tmp_states {
-                    if let Some((phase, ns)) = s.apply(c) {
-                        let ai = next_states.entry(ns).or_insert(0 as f64);
-                        *ai += v * phase as f64;
-                    } else {
-                        next_states.clear();
-                        continue 'states;
+        for (fac, mut ac) in op.terms {
+            ac.reverse();
+            'states: for (state, amp) in &self.amplitudes {
+                let mut tmp_states: HashMap<Slater, f64> = HashMap::new();
+                tmp_states.insert(*state, *amp);
+                for c in &ac {
+                    let mut next_states: HashMap<Slater, f64> = HashMap::new();
+                    for (s, v) in &tmp_states {
+                        if let Some((phase, ns)) = s.apply(c) {
+                            let ai = next_states.entry(ns).or_insert(0 as f64);
+                            *ai += v * phase as f64;
+                        } else {
+                            next_states.clear();
+                            continue 'states;
+                        }
                     }
+                    next_states.retain(|_, amp| amp.abs() > f64::EPSILON);
+                    tmp_states = next_states;
                 }
-                next_states.retain(|_, amp| amp.abs() > f64::EPSILON);
-                tmp_states = next_states;
-            }
-            for (s, v) in &tmp_states {
-                let a = res.entry(*s).or_insert(0 as f64);
-                *a += op.a*v;
+                for (s, v) in &tmp_states {
+                    let a = res.entry(*s).or_insert(0 as f64);
+                    *a += fac*v;
+                }
             }
         }
         res.retain(|_, v| v.abs() > f64::EPSILON);
@@ -139,12 +200,13 @@ impl State {
     }
 }
 
+
 pub fn run() -> Result<(), &'static str> {
-    let n1 = Operator::new(1.0, vec![
+    let n1 = Operator::new(vec![(1.0, vec![
         AC::Create(1),
         AC::Annihilate(1),
-    ]);
-    let s = State::new(vec![(Slater::from_uint(&7).unwrap(), 0.33), (Slater::from_uint(&2).unwrap(), 0.33), (Slater::from_uint(&14).unwrap(), 0.33)]);
+    ])]);
+    let s = State::new(vec![(Slater::new(7), 0.33), (Slater::new(2), 0.33), (Slater::new(14), 0.33)]);
     println!("Initial state :");
     print!("\t");
     for (key, val) in &s.amplitudes {
@@ -174,7 +236,7 @@ mod tests {
     }
     #[test]
     fn test_from_uint() {
-        let state = Slater::from_uint(&7).unwrap();
+        let state = Slater::new(7);
         assert_eq!(state.index, 7);
     }
 
@@ -191,20 +253,20 @@ mod tests {
 
     #[test]
     fn test_new_state() {
-        let s = State::new(vec![(Slater::from_uint(&7).unwrap(), 0.33), (Slater::from_uint(&2).unwrap(), 0.33), (Slater::from_uint(&14).unwrap(), 0.33)]);
+        let s = State::new(vec![(Slater::new(7), 0.33), (Slater::new(2), 0.33), (Slater::new(14), 0.33)]);
         let mut check = HashMap::new();
         check.insert(7, 0.33);
         check.insert(2, 0.33);
         check.insert(14, 0.33);
         for (key, val) in &check {
-            assert_eq!(val, s.amplitudes.get(&Slater::from_uint(key).unwrap()).unwrap());
+            assert_eq!(val, s.amplitudes.get(&Slater::new(*key)).unwrap());
         }
     }
 
     #[test]
     fn test_apply_state() {
-        let a = Operator::new(1.0, vec![ AC::Create(0), AC::Annihilate(1)]);
-        let s = State::new(vec![(Slater::from_uint(&7).unwrap(), 0.33), (Slater::from_uint(&2).unwrap(), 0.33), (Slater::from_uint(&14).unwrap(), 0.33)]);
+        let a = Operator::new(vec![(1.0, vec![ AC::Create(0), AC::Annihilate(1)])]);
+        let s = State::new(vec![(Slater::new(7), 0.33), (Slater::new(2), 0.33), (Slater::new(14), 0.33)]);
         let ns = s.apply(a);
         let mut check = HashMap::new();
         check.insert(1, 0.33);
